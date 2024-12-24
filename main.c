@@ -66,7 +66,8 @@ int reset_pin_check() {
 const uint32_t AUDIO_BUFFER_SIZE = YIN_WINDOW_WIDTH_MS * ADC_SAMPLE_RATE_HZ / 1000;
 const uint32_t AUDIO_ADC_CLK_DIV = 48000000 / ADC_SAMPLE_RATE_HZ;
 
-uint16_t audio_buff[AUDIO_BUFFER_SIZE];
+uint16_t audio_buffs[2][AUDIO_BUFFER_SIZE];
+
 
 void audio_capture_no_blocking(uint dma_chan, uint16_t *buff, size_t buff_size) {
     adc_run(false);
@@ -91,6 +92,39 @@ void audio_capture_no_blocking(uint dma_chan, uint16_t *buff, size_t buff_size) 
     dma_channel_start(dma_chan);
 }
 
+// function to take a buffer of uint16_t and return the calculated pitch in Hz (as a float)
+// Will return -1 if there's an issue
+
+float dp_diff_buff[AUDIO_BUFFER_SIZE / 2];
+float detect_pitch(uint16_t *buff) {
+    // for every offset ( o samples ), check the correlation:
+    // sum[ ( audio[t] - audio[o] ) ^ 2 ]
+    for( int o = 1; o < AUDIO_BUFFER_SIZE / 2; o++) {
+    //note: iterate through half the buffer
+    // because the offset can be as high as half the buffer, so max(t + o) = buffer size
+        for( int t = 0; t < AUDIO_BUFFER_SIZE / 2; o++ ) {
+            int diff = ( buff[t] - buff[t + o] );
+            dp_diff_buff[o] += diff * diff;  // could replace with an int array and reduce compute time significantly if required
+        }
+    }
+
+    float max_corr = 0;
+    int max_corr_index = -1;
+    for( int o = 0; o < AUDIO_BUFFER_SIZE / 2; o++) {
+        if(max_corr < dp_diff_buff[o]) {
+            max_corr = dp_diff_buff[o];
+            max_corr_index = o;
+        }
+    }
+
+    if (max_corr_index == -1) return -1; //if something went wrong, return -1
+    // the max_corr_index corresponds to an o-sample period.
+    // The corresponding frequency is:
+    // sample rate / o
+    return ADC_SAMPLE_RATE_HZ / max_corr_index;
+}
+
+uint dma_chan; // globally accessible! May pose an issue for syntax...
 int main() {
     stdio_init_all();
 
@@ -126,7 +160,7 @@ int main() {
     printf("ADC Grace Period...\n");
     sleep_ms(1000);
     // Set up the DMA to start transferring data as soon as it appears in FIFO
-    uint dma_chan = dma_claim_unused_channel(true);
+    dma_chan = dma_claim_unused_channel(true);
     printf("DMA Grace Period...\n");
     sleep_ms(1000);
 
@@ -135,9 +169,12 @@ int main() {
     multicore_launch_core1(display_ADC);
 
     int reset_counter = 0;
+    uint8_t abrr_i = 0; // audio buffer round robin
+                        // useful for the case where we want to take in audio,
+                        // and then continue to take in audio while processing the previous batch
     while(1) {
 
-        audio_capture_no_blocking(dma_chan, audio_buffer, AUDIO_BUFFER_SIZE);
+        audio_capture_no_blocking(dma_chan, audio_buffer[(abrr_i ++)%2], AUDIO_BUFFER_SIZE);
 
         sleep_ms(1000);
 
@@ -162,10 +199,11 @@ void display_ADC(void) { // uses a core to constantly print the adc audio buffer
     ssd1306_clear(&disp);
 
     while(1) {
+        ssd1306_clear(&disp);
+        dma_channel_wait_for_finish_blocking(dma_chan);
+        // can replace the following line with a display_text of a sprintf of the detected pitch from main()
         draw_adc_buffer(audio_buff, SSD1306_WIDTH * ADC_DRAW_INC, ADC_DRAW_INC, 4096 / SSD1306_HEIGHT);
         ssd1306_show(&disp);
-        sleep_ms(5);
-        ssd1306_clear(&disp);
     }
     
     sleep_ms(1000);
