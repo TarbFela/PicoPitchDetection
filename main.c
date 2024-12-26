@@ -17,7 +17,7 @@
 #define DISPLAY_LEFT_MARGIN 5
 #define ROW_HEIGHT 8
 
-
+ssd1306_t disp;
 void disp_init() {
     disp.external_vcc=false;
     ssd1306_init(&disp, SSD1306_WIDTH, SSD1306_HEIGHT, 0x3C, i2c1);
@@ -62,8 +62,11 @@ int reset_pin_check() {
 
 #define YIN_WINDOW_WIDTH_MS 10
 #define ADC_SAMPLE_RATE_HZ 6000
+#define ADC_INPUT_PIN 26
+#define RESET_PIN 1
 
 const uint32_t AUDIO_BUFFER_SIZE = YIN_WINDOW_WIDTH_MS * ADC_SAMPLE_RATE_HZ / 1000;
+const uint32_t AUDIO_BUFFER_SIZE_HALF = AUDIO_BUFFER_SIZE/2;
 const uint32_t AUDIO_ADC_CLK_DIV = 48000000 / ADC_SAMPLE_RATE_HZ;
 
 uint16_t audio_buffs[2][AUDIO_BUFFER_SIZE];
@@ -95,8 +98,13 @@ void audio_capture_no_blocking(uint dma_chan, uint16_t *buff, size_t buff_size) 
 // function to take a buffer of uint16_t and return the calculated pitch in Hz (as a float)
 // Will return -1 if there's an issue
 
-float dp_diff_buff[AUDIO_BUFFER_SIZE / 2];
+
 float detect_pitch(uint16_t *buff) {
+    float* dp_diff_buff = NULL;
+    dp_diff_buff = (float*) malloc( AUDIO_BUFFER_SIZE_HALF * sizeof(float));
+    if(dp_diff_buff == NULL) return -1;
+
+
     // for every offset ( o samples ), check the correlation:
     // sum[ ( audio[t] - audio[o] ) ^ 2 ]
     for( int o = 1; o < AUDIO_BUFFER_SIZE / 2; o++) {
@@ -116,6 +124,8 @@ float detect_pitch(uint16_t *buff) {
             max_corr_index = o;
         }
     }
+
+    free(dp_diff_buff);
 
     if (max_corr_index == -1) return -1; //if something went wrong, return -1
     // the max_corr_index corresponds to an o-sample period.
@@ -174,7 +184,7 @@ int main() {
                         // and then continue to take in audio while processing the previous batch
     while(1) {
 
-        audio_capture_no_blocking(dma_chan, audio_buffer[(abrr_i ++)%2], AUDIO_BUFFER_SIZE);
+        audio_capture_no_blocking(dma_chan, audio_buffs[(abrr_i ++)%2], AUDIO_BUFFER_SIZE);
 
         sleep_ms(1000);
 
@@ -202,7 +212,7 @@ void display_ADC(void) { // uses a core to constantly print the adc audio buffer
         ssd1306_clear(&disp);
         dma_channel_wait_for_finish_blocking(dma_chan);
         // can replace the following line with a display_text of a sprintf of the detected pitch from main()
-        draw_adc_buffer(audio_buff, SSD1306_WIDTH * ADC_DRAW_INC, ADC_DRAW_INC, 4096 / SSD1306_HEIGHT);
+        draw_adc_buffer(audio_buffs[0], SSD1306_WIDTH * ADC_DRAW_INC, ADC_DRAW_INC, 4096 / SSD1306_HEIGHT);
         ssd1306_show(&disp);
     }
     
