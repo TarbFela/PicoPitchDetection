@@ -185,20 +185,30 @@ int main() {
     uint8_t abrr_i = 0; // audio buffer round robin
                         // useful for the case where we want to take in audio,
                         // and then continue to take in audio while processing the previous batch
-    while(1) {
+    char user_input = 0;
 
-        audio_capture_no_blocking(dma_chan, audio_buffs[(abrr_i ++) % 2], AUDIO_BUFFER_SIZE);
+    while( user_input != 'q' ) {
 
-        dma_channel_wait_for_finish_blocking(dma_chan);
-        //printf("Audio buffer:");
-        for(int i = 0; i<AUDIO_BUFFER_SIZE_HALF; i++) printf("%d,", audio_buffs[0][i]);
-        printf("\n");
-        //reset check, counter
-        //sleep_ms(10);
-        //reset_counter += (sio_hw->gpio_in & (1<<RESET_PIN)) ? 1 : 0;
-        //if(reset_counter == 100) { reset_usb_boot(0,0); break;}
+        for(int ii = 0; ii < 100; ii ++) {
+
+            //abrr_i = ( abrr_i + 1 ) % 2;
+            audio_capture_no_blocking(dma_chan, audio_buffs[0], AUDIO_BUFFER_SIZE);
+
+            dma_channel_wait_for_finish_blocking(dma_chan);
+            //printf("Audio buffer:");
+            for(int i = 0; i<AUDIO_BUFFER_SIZE_HALF; i++) printf("%d,", audio_buffs[0][i]);
+            printf("\n");
+            //reset check, counter
+            sleep_ms(10);
+            //reset_counter += (sio_hw->gpio_in & (1<<RESET_PIN)) ? 1 : 0;
+            //if(reset_counter == 100) { reset_usb_boot(0,0); break;}
+        }
+        scanf("%c", &user_input);
+        printf("\n\n\t\t%c\n",user_input);
+        sleep_ms(1000);
     }
 
+    reset_usb_boot(0,0);
     return 0;
 }
 
