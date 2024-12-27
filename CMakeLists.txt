@@ -26,6 +26,7 @@ target_include_directories(Pitch_Detection
 target_link_libraries(Pitch_Detection
 	pico_stdlib 
 	hardware_spi
+	hardware_dma
 	hardware_gpio
 	hardware_adc
 	pico_multicore

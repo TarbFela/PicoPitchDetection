@@ -1,9 +1,11 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
 #include "pico/stdlib.h"
 #include "hardware/i2c.h"
 #include "hardware/adc.h"
+#include "hardware/dma.h"
 #include "pico/multicore.h"
 #include "pico/bootrom.h"
 
@@ -56,20 +58,21 @@ void display_number(int row, int number) {
     sprintf(buf, "%d", number);
     display_text(row, buf);
 }
+#define RESET_PIN 1
 int reset_pin_check() {
     return (sio_hw->gpio_in & (1<<RESET_PIN) != 0);
 }
 
-#define YIN_WINDOW_WIDTH_MS 10
-#define ADC_SAMPLE_RATE_HZ 6000
+#define YIN_WINDOW_WIDTH_MS 20
+#define ADC_SAMPLE_RATE_HZ 20000
 #define ADC_INPUT_PIN 26
-#define RESET_PIN 1
 
-const uint32_t AUDIO_BUFFER_SIZE = YIN_WINDOW_WIDTH_MS * ADC_SAMPLE_RATE_HZ / 1000;
-const uint32_t AUDIO_BUFFER_SIZE_HALF = AUDIO_BUFFER_SIZE/2;
-const uint32_t AUDIO_ADC_CLK_DIV = 48000000 / ADC_SAMPLE_RATE_HZ;
 
-uint16_t audio_buffs[2][AUDIO_BUFFER_SIZE];
+#define AUDIO_BUFFER_SIZE          (YIN_WINDOW_WIDTH_MS * ADC_SAMPLE_RATE_HZ / 1000)
+#define AUDIO_BUFFER_SIZE_HALF     (AUDIO_BUFFER_SIZE/2)
+#define AUDIO_ADC_CLK_DIV          (48000000 / ADC_SAMPLE_RATE_HZ)
+
+uint16_t audio_buffs[1][AUDIO_BUFFER_SIZE];
 
 
 void audio_capture_no_blocking(uint dma_chan, uint16_t *buff, size_t buff_size) {
@@ -176,7 +179,7 @@ int main() {
 
 
     // Constantly display ADC value (~5ms refresh time)
-    multicore_launch_core1(display_ADC);
+    //multicore_launch_core1(display_ADC);
 
     int reset_counter = 0;
     uint8_t abrr_i = 0; // audio buffer round robin
@@ -184,14 +187,16 @@ int main() {
                         // and then continue to take in audio while processing the previous batch
     while(1) {
 
-        audio_capture_no_blocking(dma_chan, audio_buffs[(abrr_i ++)%2], AUDIO_BUFFER_SIZE);
+        audio_capture_no_blocking(dma_chan, audio_buffs[(abrr_i ++) % 2], AUDIO_BUFFER_SIZE);
 
-        sleep_ms(1000);
-
+        dma_channel_wait_for_finish_blocking(dma_chan);
+        //printf("Audio buffer:");
+        for(int i = 0; i<AUDIO_BUFFER_SIZE_HALF; i++) printf("%d,", audio_buffs[0][i]);
+        printf("\n");
         //reset check, counter
-        sleep_ms(10);
-        reset_counter += (sio_hw->gpio_in & (1<<RESET_PIN)) ? 1 : 0;
-        if(reset_counter == 100) { reset_usb_boot(0,0); break;}
+        //sleep_ms(10);
+        //reset_counter += (sio_hw->gpio_in & (1<<RESET_PIN)) ? 1 : 0;
+        //if(reset_counter == 100) { reset_usb_boot(0,0); break;}
     }
 
     return 0;
