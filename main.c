@@ -19,6 +19,7 @@
 #define DISPLAY_LEFT_MARGIN 5
 #define ROW_HEIGHT 8
 
+/*
 ssd1306_t disp;
 void disp_init() {
     disp.external_vcc=false;
@@ -58,6 +59,10 @@ void display_number(int row, int number) {
     sprintf(buf, "%d", number);
     display_text(row, buf);
 }
+
+ */
+
+
 #define RESET_PIN 1
 int reset_pin_check() {
     return (sio_hw->gpio_in & (1<<RESET_PIN) != 0);
@@ -68,11 +73,12 @@ int reset_pin_check() {
 #define ADC_INPUT_PIN 26
 
 
+
 #define AUDIO_BUFFER_SIZE          (YIN_WINDOW_WIDTH_MS * ADC_SAMPLE_RATE_HZ / 1000)
 #define AUDIO_BUFFER_SIZE_HALF     (AUDIO_BUFFER_SIZE/2)
 #define AUDIO_ADC_CLK_DIV          (48000000 / ADC_SAMPLE_RATE_HZ)
 
-uint16_t audio_buffs[1][AUDIO_BUFFER_SIZE];
+uint16_t audio_buffs[2][AUDIO_BUFFER_SIZE];
 
 
 void audio_capture_no_blocking(uint dma_chan, uint16_t *buff, size_t buff_size) {
@@ -196,7 +202,7 @@ int main() {
 
             dma_channel_wait_for_finish_blocking(dma_chan);
             //printf("Audio buffer:");
-            for(int i = 0; i<AUDIO_BUFFER_SIZE_HALF; i++) printf("%d,", audio_buffs[0][i]);
+            for(int i = 0; i<AUDIO_BUFFER_SIZE; i++) printf("%d,", audio_buffs[0][i]);
             printf("\n");
             //reset check, counter
             sleep_ms(10);
