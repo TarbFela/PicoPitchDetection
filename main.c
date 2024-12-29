@@ -219,7 +219,7 @@ int main() {
 }
 
 
-
+/*
 #define ADC_DRAW_INC 5
 void display_ADC(void) { // uses a core to constantly print the adc audio buffer to the screen
     i2c_init(i2c1, 400000);
@@ -244,3 +244,5 @@ void display_ADC(void) { // uses a core to constantly print the adc audio buffer
     
     //}
 }
+
+ */
