@@ -3,70 +3,31 @@
 #include <stdint.h>
 #include <string.h>
 #include "pico/stdlib.h"
-#include "hardware/i2c.h"
 #include "hardware/adc.h"
 #include "hardware/dma.h"
 #include "pico/multicore.h"
 #include "pico/bootrom.h"
 
-#include "ssd1306.h"
-#include "BMSPA_font.h"
-
-#define SSD1306_HEIGHT      64
-#define SSD1306_WIDTH       128
-#define SSD1306_CENTER_X    64
-#define SSD1306_CENTER_Y    32
-#define DISPLAY_LEFT_MARGIN 5
-#define ROW_HEIGHT 8
-
-/*
-ssd1306_t disp;
-void disp_init() {
-    disp.external_vcc=false;
-    ssd1306_init(&disp, SSD1306_WIDTH, SSD1306_HEIGHT, 0x3C, i2c1);
-    ssd1306_poweron(&disp);
-    ssd1306_clear(&disp);
-}
-
-void display_ADC(void);
-
-void display_text(int row, const char *s) {
-    int x = DISPLAY_LEFT_MARGIN;
-    int y = row*ROW_HEIGHT;
-    ssd1306_draw_string(&disp, x, y, 1, s);
-}
-
-void display_adc_value(int row, int channel) {
-    adc_select_input(channel);
-    uint32_t value = adc_read();
-    static char buf[20];
-    sprintf(buf, "%d, 0x%X", value, value);
-    display_text(row, buf);
-}
-
-// draw from a buffer of values accross the screen.
-// Will overlap onto itself vertically and horizontally.
-// Takes unsigned values, so bottom of screen = 0
-// Will access every "increment" index of the buff according to the size
-void draw_adc_buffer(uint16_t *adc_buff, int buff_size, int increment, int height_div) {
-    for(int i = 0; i< buff_size; i+= increment) {
-        ssd1306_draw_pixel( &disp, i % SSD1306_WIDTH, (adc_buff[i] / height_div) % SSD1306_HEIGHT);
-    }
-}
-
-void display_number(int row, int number) {
-    static char buf[20];
-    sprintf(buf, "%d", number);
-    display_text(row, buf);
-}
-
- */
+#include "pitch_analysis.h"
 
 
 #define RESET_PIN 1
 int reset_pin_check() {
-    return (sio_hw->gpio_in & (1<<RESET_PIN) != 0);
+    return ((sio_hw->gpio_in & (1<<RESET_PIN)) != 0);
 }
+
+// The window width has a minimum value equal to
+// 2 over the minimum pitch you want to detect, i.e.
+//     2 / minimum_detectable_frequency
+// Thanks to the behavior of the pitch-detection algorithm
+// TODO: An idea which may shorten the minimum window width as much as 50% is this:
+//    For very low notes (such as Ab2), instead of looking for a single peak
+//    in the correlation function which is less than the threshhold (e.g. 0.1 out of 1),
+//    we can look for patterns in the nearby 1st and 2nd harmonics.
+//    The algorithm to do this would look for local minima in the correlations
+//    and then evaluate them somehow...
+//    Realistically, this would work well for notes up to F (tenor sax) (concert Eb)
+//    Which has a frequency of about 150Hz, so our window would drop to 13ms.
 
 #define YIN_WINDOW_WIDTH_MS 20
 #define ADC_SAMPLE_RATE_HZ 20000
@@ -192,10 +153,15 @@ int main() {
                         // useful for the case where we want to take in audio,
                         // and then continue to take in audio while processing the previous batch
     char user_input = 0;
+    scanf("%c", &user_input);
+    printf("\n\n\t\t%c\n",user_input);
 
     while( user_input != 'q' ) {
-
-        for(int ii = 0; ii < 100; ii ++) {
+        int capt_len_mult = 1;
+        if( user_input <= 57 || user_input > 48 ) {
+            capt_len_mult *= (user_input - 48); // if the user types a number between 1 and 9, multiply the capture by that amount!
+        }
+        for(int ii = 0; ii < 200; ii ++) {
 
             //abrr_i = ( abrr_i + 1 ) % 2;
             audio_capture_no_blocking(dma_chan, audio_buffs[0], AUDIO_BUFFER_SIZE);
@@ -205,7 +171,7 @@ int main() {
             for(int i = 0; i<AUDIO_BUFFER_SIZE; i++) printf("%d,", audio_buffs[0][i]);
             printf("\n");
             //reset check, counter
-            sleep_ms(10);
+            sleep_ms(5);
             //reset_counter += (sio_hw->gpio_in & (1<<RESET_PIN)) ? 1 : 0;
             //if(reset_counter == 100) { reset_usb_boot(0,0); break;}
         }
@@ -217,32 +183,3 @@ int main() {
     reset_usb_boot(0,0);
     return 0;
 }
-
-
-/*
-#define ADC_DRAW_INC 5
-void display_ADC(void) { // uses a core to constantly print the adc audio buffer to the screen
-    i2c_init(i2c1, 400000);
-
-    disp.external_vcc=false;
-    ssd1306_init(&disp, SSD1306_WIDTH, SSD1306_HEIGHT, 0x3C, i2c1);
-    ssd1306_poweron(&disp);
-    ssd1306_clear(&disp);
-
-    while(1) {
-        ssd1306_clear(&disp);
-        dma_channel_wait_for_finish_blocking(dma_chan);
-        // can replace the following line with a display_text of a sprintf of the detected pitch from main()
-        draw_adc_buffer(audio_buffs[0], SSD1306_WIDTH * ADC_DRAW_INC, ADC_DRAW_INC, 4096 / SSD1306_HEIGHT);
-        ssd1306_show(&disp);
-    }
-    
-    sleep_ms(1000);
-    ssd1306_poweroff(&disp);
-    sleep_ms(100);
-    ssd1306_deinit(&disp);
-    
-    //}
-}
-
- */

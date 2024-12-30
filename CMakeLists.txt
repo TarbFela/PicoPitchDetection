@@ -15,7 +15,7 @@ pico_sdk_init()
 
 add_executable(Pitch_Detection
 	main.c 
-	../ssd1306.c
+	pitch_analysis.c
 )
 
 target_include_directories(Pitch_Detection
