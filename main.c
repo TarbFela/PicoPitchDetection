@@ -1,22 +1,37 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <string.h>
-#include <time.h>
+//#include <string.h>
+
 #include "pico/stdlib.h"
 #include "hardware/adc.h"
 #include "hardware/dma.h"
 #include "pico/multicore.h"
 #include "pico/bootrom.h"
+#include "pico/binary_info.h"
 
 #include "pitch_analysis.h"
 #include "midi_device.h"
+
+#include "bsp/board.h"
+#include "tusb.h"
+
 
 
 #define RESET_PIN 1
 int reset_pin_check() {
     return ((sio_hw->gpio_in & (1<<RESET_PIN)) != 0);
 }
+
+
+// —————————————————————————————————————————————————————————————————————————————————————————
+//                             AUDIO CAPTURE FUNCTION
+// —————————————————————————————————————————————————————————————————————————————————————————
+
+
+//                                +——————————————————————————+
+//                                ||         CONSTS         ||
+//                                +——————————————————————————+
 
 // The window width has a minimum value equal to
 // 2 over the minimum pitch you want to detect, i.e.
@@ -41,8 +56,17 @@ int reset_pin_check() {
 #define AUDIO_BUFFER_SIZE_HALF     (AUDIO_BUFFER_SIZE/2)
 #define AUDIO_ADC_CLK_DIV          (48000000 / ADC_SAMPLE_RATE_HZ)
 
+
+//                                +——————————————————————————+
+//                                ||      AUDIO BUFFER      ||
+//                                +——————————————————————————+
+
 uint16_t audio_buffs[2][AUDIO_BUFFER_SIZE];
 
+
+//                                +——————————————————————————+
+//                                ||      AUDIO CAPTURE     ||
+//                                +——————————————————————————+
 
 void audio_capture_no_blocking(uint dma_chan, uint16_t *buff, size_t buff_size) {
     adc_run(false);
@@ -67,47 +91,55 @@ void audio_capture_no_blocking(uint dma_chan, uint16_t *buff, size_t buff_size) 
     dma_channel_start(dma_chan);
 }
 
-// function to take a buffer of uint16_t and return the calculated pitch in Hz (as a float)
-// Will return -1 if there's an issue
 
-/*
-float detect_pitch(uint16_t *buff) {
-    float* dp_diff_buff = NULL;
-    dp_diff_buff = (float*) malloc( AUDIO_BUFFER_SIZE_HALF * sizeof(float));
-    if(dp_diff_buff == NULL) return -1;
+// —————————————————————————————————————————————————————————————————————————————————————————
+//                                         MULTICORE CODE
+// —————————————————————————————————————————————————————————————————————————————————————————
 
+#define MULTICORE_GOOD_FLAG 0xBEEF
+void core1_entry() {
 
-    // for every offset ( o samples ), check the correlation:
-    // sum[ ( audio[t] - audio[o] ) ^ 2 ]
-    for( int o = 1; o < AUDIO_BUFFER_SIZE / 2; o++) {
-    //note: iterate through half the buffer
-    // because the offset can be as high as half the buffer, so max(t + o) = buffer size
-        for( int t = 0; t < AUDIO_BUFFER_SIZE / 2; o++ ) {
-            int diff = ( buff[t] - buff[t + o] );
-            dp_diff_buff[o] += diff * diff;  // could replace with an int array and reduce compute time significantly if required
+    // initialize...
+    multicore_fifo_push_blocking(MULTICORE_GOOD_FLAG); // tell main that we're good
+
+    board_init();
+    tusb_init();
+
+    int pitch = -1;
+    int i = 0;
+    while(1) {
+        /*
+        uint32_t mcfifo_val = multicore_fifo_pop_blocking();
+        //printf("[Mutlicore] Core 1 Received Value: %X\n",mcfifo_val);
+        int frequency = find_frequency( audio_buffs[mcfifo_val], AUDIO_BUFFER_SIZE, ADC_SAMPLE_RATE_HZ, 100, 5000, 10);
+
+        pitch = -1; //default
+        if( frequency == -1) printf("Bad arguments...\n");
+        else if(frequency == -2) printf("Malloc failed (sad) ... \n");
+        else {
+            pitch = frequency_to_pitch(frequency); //actual
         }
+        midi_control(pitch);
+         */
+        if( multicore_fifo_rvalid() ) {
+                multicore_fifo_pop_blocking();
+                int frequency = find_frequency( audio_buffs[0], AUDIO_BUFFER_SIZE, ADC_SAMPLE_RATE_HZ, 100, 5000, 10);
+                int pitch = frequency_to_pitch(frequency); //actual
+                if(pitch == -1) pitch = 0;
+                else: pitch = pitch + 60; // up a few octaves...
+                midi_control( pitch );
+                i = 1;
+        }
+
+        if( (i++) % 480001 == 0) {
+
+            midi_control( (5*i)%24 + 70 );
+        }
+        tud_task();
     }
 
-    float max_corr = 0;
-    int max_corr_index = -1;
-    for( int o = 0; o < AUDIO_BUFFER_SIZE / 2; o++) {
-        if(max_corr < dp_diff_buff[o]) {
-            max_corr = dp_diff_buff[o];
-            max_corr_index = o;
-        }
-    }
 
-    free(dp_diff_buff);
-
-    if (max_corr_index == -1) return -1; //if something went wrong, return -1
-    // the max_corr_index corresponds to an o-sample period.
-    // The corresponding frequency is:
-    // sample rate / o
-    return ADC_SAMPLE_RATE_HZ / max_corr_index;
 }
-
- */
-
 
 
 uint dma_chan; // globally accessible! May pose an issue for syntax...
@@ -121,6 +153,12 @@ int main() {
     // RESET PIN
     gpio_init(RESET_PIN);
     gpio_pull_down(RESET_PIN);
+
+
+//                                +——————————————————————————+
+//                                ||         ADC INIT       ||
+//                                +——————————————————————————+
+
 
     // TODO: consolidate adc and dma inits and controls into separate file
   // ADC Setup modified from pi pico example:
@@ -147,73 +185,52 @@ int main() {
 
     printf("ADC Grace Period...\n");
     sleep_ms(1000);
+
+
+//                                +——————————————————————————+
+//                                ||        DMA INIT        ||
+//                                +——————————————————————————+
+
     // Set up the DMA to start transferring data as soon as it appears in FIFO
     dma_chan = dma_claim_unused_channel(true);
     printf("DMA Grace Period...\n");
+    sleep_ms(7000);
+
+//                                +——————————————————————————+
+//                                ||     MULTICORE INIT     ||
+//                                +——————————————————————————+
+
+    multicore_launch_core1(core1_entry);
+    uint32_t mcfifo_val = multicore_fifo_pop_blocking();
+    if(mcfifo_val != MULTICORE_GOOD_FLAG) printf("Failed to initialize core 1.\n");
+
+    
+
+
     sleep_ms(1000);
 
 
 
-
     int reset_counter = 0;
-    uint8_t abrr_i = 0; // audio buffer round robin
+    uint32_t abrr_i = 0; // audio buffer round robin
                         // useful for the case where we want to take in audio,
                         // and then continue to take in audio while processing the previous batch
 
     // —————————————————————————————————————————————————————————————————————————————————————————
-    //                                         USER INPUT INITS
+    //                                      MAIN LOOP
     // —————————————————————————————————————————————————————————————————————————————————————————
 
+    while(1) {
 
 
+        //abrr_i = ( abrr_i + 1 ) % 2;
+        audio_capture_no_blocking(dma_chan, audio_buffs[0], AUDIO_BUFFER_SIZE);
+        dma_channel_wait_for_finish_blocking(dma_chan);
+
+        multicore_fifo_push_blocking( 0 );
+        sleep_ms(100);
 
 
-    char user_input = 0;
-    scanf("%c", &user_input);
-    printf("\n\n\t\t%c\n",user_input);
-
-    clock_t start,end;
-    while( user_input != 'q' ) {
-        int capt_len_mult = 1;
-        if( user_input <= 57 || user_input > 48 ) {
-            capt_len_mult *= (user_input - 48); // if the user types a number between 1 and 9, multiply the capture by that amount!
-        }
-        for(int ii = 0; ii < 10; ii ++) {
-
-            //start = clock();
-            //abrr_i = ( abrr_i + 1 ) % 2;
-            audio_capture_no_blocking(dma_chan, audio_buffs[0], AUDIO_BUFFER_SIZE);
-            dma_channel_wait_for_finish_blocking(dma_chan);
-
-            //end = clock();
-            printf("Clock cycles to record audio: %d\n", (double)(end-start));
-
-            //printf("Audio buffer:");
-            //for(int i = 0; i<AUDIO_BUFFER_SIZE; i++) printf("%d,", audio_buffs[0][i]);
-            //printf("\n");
-            //reset check, counter
-            //start = clock();
-            int frequency = find_frequency( audio_buffs[0], AUDIO_BUFFER_SIZE, ADC_SAMPLE_RATE_HZ, 100, 5000, 10);
-            //end = clock();
-            //printf("Clock cycles to analyze pitch: %d\n", (double)(end-start));
-            if( frequency == -1) printf("Bad arguments...\n");
-            else if(frequency == -2) printf("Malloc failed (sad) ... \n");
-            else {
-                int pitch = frequency_to_pitch(frequency);
-
-                printf("Frequency: %5.0d",frequency);
-                printf("\tPitch: %5.0d\t",pitch);
-                print_note(pitch);
-                printf("\n");
-            }
-
-            sleep_ms(5);
-            //reset_counter += (sio_hw->gpio_in & (1<<RESET_PIN)) ? 1 : 0;
-            //if(reset_counter == 100) { reset_usb_boot(0,0); break;}
-        }
-        scanf("%c", &user_input);
-        printf("\n\n\t\t%c\n",user_input);
-        sleep_ms(1000);
     }
 
     reset_usb_boot(0,0);

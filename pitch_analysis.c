@@ -19,7 +19,7 @@
 
 int find_frequency(uint16_t *buff, uint32_t size, uint32_t sample_rate, uint32_t min_freq, uint32_t max_freq, uint32_t correlation_threshhold) {
     uint32_t half_size = size / 2;
-
+    int ret_val = -1;
     // check for bad inputs
     if(min_freq < half_size / sample_rate || max_freq > sample_rate || max_freq < min_freq) return -1;
 
@@ -55,9 +55,12 @@ int find_frequency(uint16_t *buff, uint32_t size, uint32_t sample_rate, uint32_t
 
     //printf("\n");
     for( tau = min_tau; tau < half_size; tau++) {
-        if( corrs[tau] < correlation_threshhold) return (sample_rate/tau);
+        if( corrs[tau] < correlation_threshhold) ret_val= (sample_rate/tau);
     }
-    return 0;
+    free(corrs); // oopsies don't want a memory leak now, do we?
+
+    if(ret_val == -1) return 0;
+    return ret_val;
 
 }
 
@@ -77,7 +80,7 @@ int frequency_to_pitch( int freq) {
     int pitch = 0;
 
     // divide frequency by 2 until we get to the range of acceptable frequencies
-    while(freq > PITCH_FREQS[11]) {freq >>=1; pitch += 12;}
+    while(freq > PITCH_FREQS[11]) {freq >>= 1; pitch += 12;}
 
     //iterate through list of frequencies and find the minimum
     // note: would a binary search be faster? Yes. How much time does this take? Not enough to matter.
