@@ -69,7 +69,7 @@ void audio_capture_no_blocking(uint dma_chan, uint16_t *buff, size_t buff_size) 
 // function to take a buffer of uint16_t and return the calculated pitch in Hz (as a float)
 // Will return -1 if there's an issue
 
-
+/*
 float detect_pitch(uint16_t *buff) {
     float* dp_diff_buff = NULL;
     dp_diff_buff = (float*) malloc( AUDIO_BUFFER_SIZE_HALF * sizeof(float));
@@ -105,6 +105,10 @@ float detect_pitch(uint16_t *buff) {
     return ADC_SAMPLE_RATE_HZ / max_corr_index;
 }
 
+ */
+
+
+
 uint dma_chan; // globally accessible! May pose an issue for syntax...
 int main() {
     stdio_init_all();
@@ -115,7 +119,7 @@ int main() {
     gpio_init(RESET_PIN);
     gpio_pull_down(RESET_PIN);
 
-
+    // TODO: consolidate adc and dma inits and controls into separate file
   // ADC Setup modified from pi pico example:
   // https://github.com/raspberrypi/pico-examples/blob/master/adc/dma_capture/dma_capture.c
     adc_init();
@@ -135,7 +139,7 @@ int main() {
     // continuously) or > 95 (take samples less frequently than 96 cycle
     // intervals). This is all timed by the 48 MHz ADC clock.
 
-    // divisor of  8000 -> 48MHz / 8000 = 6kHz
+    // divisor of  8000 -> 48MHz / 8000 = 6kHz (currently 20kHz...)
     adc_set_clkdiv(AUDIO_ADC_CLK_DIV);
 
     printf("ADC Grace Period...\n");

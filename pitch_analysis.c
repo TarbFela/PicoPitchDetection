@@ -74,3 +74,44 @@ int find_frequency(uint16_t *buff, uint32_t size, uint32_t sample_rate, uint32_t
     return 0;
 
 }
+
+
+// frequencies of C0 to B0
+const int PITCH_FREQS[12] = {  16, 17, 18, 19,
+                               21, 22, 23, 25,
+                               26, 28, 29, 31 };
+// take a frequency input and output the midi pitch ( C0 = 0 )
+// Return values:
+//       -2: frequency positive but too low
+//       -1: frequency is zero
+int frequency_to_pitch( int freq) {
+    if(freq == 0) return -1;
+    else if(freq < PITCH_FREQS[0]) return -2;
+
+    int pitch = 0;
+
+    // divide frequency by 2 until we get to the range of acceptable frequencies
+    while(freq > PITCH_FREQS[11]) {freq >>=1; pitch += 12;}
+
+    //iterate through list of frequencies and find the minimum
+    // note: would a binary search be faster? Yes. How much time does this take? Not enough to matter.
+
+
+    //arbitrary for code density
+    int min_diff = 100;
+    int ii = -1;
+    for( int i =0; i<12; i++) {
+        int diff = PITCH_FREQS[i] - freq;
+        diff = (diff < 0 ) ? diff * -1 : diff; // absolute value
+        if(min_diff > diff) {
+            min_diff = diff;
+            ii = i;
+        }
+    }
+    if(ii == -1) return -3;
+
+    pitch += ii;
+
+    return pitch;
+
+}
