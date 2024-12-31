@@ -9,6 +9,7 @@
 #include "pico/bootrom.h"
 
 #include "pitch_analysis.h"
+#include "midi_device.h"
 
 
 #define RESET_PIN 1
