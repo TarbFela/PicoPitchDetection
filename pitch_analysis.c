@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 
 
@@ -17,60 +18,45 @@
 //    -2: malloc failed (damn you, malloc!)
 
 int find_frequency(uint16_t *buff, uint32_t size, uint32_t sample_rate, uint32_t min_freq, uint32_t max_freq, uint32_t correlation_threshhold) {
-    // check for bad inputs
-    if(min_freq < size * 0.5 / sample_rate || max_freq > sample_rate || max_freq < min_freq) return -1;
+    uint32_t half_size = size / 2;
 
-    uint32_t min_tau = sample_rate / max_freq;
-    uint32_t max_tau = sample_rate / min_freq;
+    // check for bad inputs
+    if(min_freq < half_size / sample_rate || max_freq > sample_rate || max_freq < min_freq) return -1;
+
+
     uint32_t tau;
 
-    // I think the compiler would handle this optimization but I'd rather be sure...
-    uint32_t half_size = size / 2;
+    uint32_t min_tau = sample_rate / max_freq;
 
     // note: uint32_t goes up to 4.3 billion. The highest correlations
     // I've seen so far with buffer sizes this big are around 5 million,
     // so this could be a hazard but seems safe for now.
+
     uint32_t *corrs;
-    corrs = (uint32_t *) malloc( (max_freq - min_freq) * sizeof(uint32_t) );
+    corrs = (uint32_t *) malloc( (half_size + 1) * sizeof(uint32_t)  );
 
     uint32_t cum_avg = 1;
 
 
-    for(int i = 0, tau = min_tau ; tau < max_tau; i++, tau++) {
-        corrs[i] = 0;  // new tau value, new associated correlation
-        for(int t = 0; t < half_size; t++) {
-            uint32_t diff = (buff[t] - buff[t + tau]);
-            corrs[tau] += diff * diff;
-        // a cumulative average...
-        // avg = sum of corrs / tau
-        // by adding another corr, we must say:
-        // old avg = sum of old corrs / (tau - 1)
-        // new avg = sum of old corrs + new corr / tau
-        // or.. sum of prev corrs = old avg * (tau - 1)
-        // so new avg = (sum of prev corrs + new corr) / tau
-        // so...
-        // new avg = ( old avg * (tau-1) + new corr ) / tau
-        // this is faster than re-iterating the average from the list of corrs
-        // it is worth noting:
+    for( tau = 0; tau < half_size; tau++) {
+        corrs[tau] = 0;
+        for( int sample = 0; sample < half_size; sample ++) {
+            int diff = (int)(buff[sample] - buff[sample+tau]);
+            uint32_t diff_squared = diff*diff;
+            corrs[tau] += diff_squared;
         }
-        if(i == 0) {
-            cum_avg = corrs[i]; //AFTER the first iteration, the average wil be the first corr
-        } else {
-            cum_avg = (cum_avg * (i-1) + corrs[-1])/i;
-            // this "normalizes" the correlation value (we multiply by 100 because
-            // decimal values and integer types don't get along
-            corrs[i] = 100 * corrs[i] / cum_avg;
-        }
-
-        // IF THE CORRELATION MEETS THE THRESHOLD, SAVE SOME TIME AND EXIT THE LOOP
-        if(corrs[i] < correlation_threshhold) {
-            free(corrs);
-            return ( sample_rate / tau );
+        if(tau == 0) cum_avg = corrs[tau];
+        else {
+            cum_avg = (cum_avg * (tau - 1) + corrs[tau]) / tau;
+            corrs[tau] = 100 * corrs[tau] / cum_avg;
+            //printf("\tf: %7.0d, ca: %10.0d, c: %7.0d\n", (int)(sample_rate/tau), cum_avg, corrs[tau]);
         }
     }
 
-    // IF NO FREQUENCY FOUND, RETURN 0
-    free(corrs);
+    //printf("\n");
+    for( tau = min_tau; tau < half_size; tau++) {
+        if( corrs[tau] < correlation_threshhold) return (sample_rate/tau);
+    }
     return 0;
 
 }
@@ -113,5 +99,15 @@ int frequency_to_pitch( int freq) {
     pitch += ii;
 
     return pitch;
+
+}
+
+
+const char print_note_strings[12][3] = {
+     "C\0","C#\0", "D\0","D#\0", "E\0","F\0","F#\0", "G\0","G#\0", "A\0","A#\0", "B\0"
+};
+void print_note(int pitch) {
+    if(pitch < 1) printf("Bad print_note() input...");
+    else printf("%s  (%d)\n",print_note_strings[pitch%12], pitch/12);
 
 }

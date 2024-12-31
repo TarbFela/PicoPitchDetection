@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <time.h>
 #include "pico/stdlib.h"
 #include "hardware/adc.h"
 #include "hardware/dma.h"
@@ -111,10 +112,12 @@ float detect_pitch(uint16_t *buff) {
 
 uint dma_chan; // globally accessible! May pose an issue for syntax...
 int main() {
+
+    // —————————————————————————————————————————————————————————————————————————————————————————
+    //                                         INITS
+    // —————————————————————————————————————————————————————————————————————————————————————————
+
     stdio_init_all();
-
-
-
     // RESET PIN
     gpio_init(RESET_PIN);
     gpio_pull_down(RESET_PIN);
@@ -150,32 +153,60 @@ int main() {
     sleep_ms(1000);
 
 
-    // Constantly display ADC value (~5ms refresh time)
-    //multicore_launch_core1(display_ADC);
+
 
     int reset_counter = 0;
     uint8_t abrr_i = 0; // audio buffer round robin
                         // useful for the case where we want to take in audio,
                         // and then continue to take in audio while processing the previous batch
+
+    // —————————————————————————————————————————————————————————————————————————————————————————
+    //                                         USER INPUT INITS
+    // —————————————————————————————————————————————————————————————————————————————————————————
+
+
+
+
+
     char user_input = 0;
     scanf("%c", &user_input);
     printf("\n\n\t\t%c\n",user_input);
 
+    clock_t start,end;
     while( user_input != 'q' ) {
         int capt_len_mult = 1;
         if( user_input <= 57 || user_input > 48 ) {
             capt_len_mult *= (user_input - 48); // if the user types a number between 1 and 9, multiply the capture by that amount!
         }
-        for(int ii = 0; ii < 200; ii ++) {
+        for(int ii = 0; ii < 10; ii ++) {
 
+            //start = clock();
             //abrr_i = ( abrr_i + 1 ) % 2;
             audio_capture_no_blocking(dma_chan, audio_buffs[0], AUDIO_BUFFER_SIZE);
-
             dma_channel_wait_for_finish_blocking(dma_chan);
+
+            //end = clock();
+            printf("Clock cycles to record audio: %d\n", (double)(end-start));
+
             //printf("Audio buffer:");
-            for(int i = 0; i<AUDIO_BUFFER_SIZE; i++) printf("%d,", audio_buffs[0][i]);
-            printf("\n");
+            //for(int i = 0; i<AUDIO_BUFFER_SIZE; i++) printf("%d,", audio_buffs[0][i]);
+            //printf("\n");
             //reset check, counter
+            //start = clock();
+            int frequency = find_frequency( audio_buffs[0], AUDIO_BUFFER_SIZE, ADC_SAMPLE_RATE_HZ, 100, 5000, 10);
+            //end = clock();
+            //printf("Clock cycles to analyze pitch: %d\n", (double)(end-start));
+            if( frequency == -1) printf("Bad arguments...\n");
+            else if(frequency == -2) printf("Malloc failed (sad) ... \n");
+            else {
+                int pitch = frequency_to_pitch(frequency);
+
+                printf("Frequency: %5.0d",frequency);
+                printf("\tPitch: %5.0d\t",pitch);
+                print_note(pitch);
+                printf("\n");
+            }
+
             sleep_ms(5);
             //reset_counter += (sio_hw->gpio_in & (1<<RESET_PIN)) ? 1 : 0;
             //if(reset_counter == 100) { reset_usb_boot(0,0); break;}
