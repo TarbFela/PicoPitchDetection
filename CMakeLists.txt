@@ -15,18 +15,17 @@ add_executable(PitchDetection
 		pitch_analysis.c
 )
 
-pico_enable_stdio_usb(PitchDetection 0)
-pico_enable_stdio_uart(PitchDetection 1)
+# stdio_usb = 1 for usb debugging, = 0 for midi functionality
+pico_enable_stdio_usb(PitchDetection 1)
+pico_enable_stdio_uart(PitchDetection 0)
 
 target_include_directories(PitchDetection PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 
 pico_add_extra_outputs(PitchDetection)
 target_link_libraries(PitchDetection PRIVATE pico_stdlib tinyusb_device tinyusb_board
 	hardware_dma
-	#hardware_gpio
 	hardware_adc
 	pico_multicore
 	pico_bootrom
-	#hardware_i2c
 )
 

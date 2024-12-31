@@ -8,10 +8,11 @@
 #include "hardware/dma.h"
 #include "pico/multicore.h"
 #include "pico/bootrom.h"
-#include "pico/binary_info.h"
+
 
 #include "pitch_analysis.h"
 #include "midi_device.h"
+#include "pico/binary_info.h"
 
 #include "bsp/board.h"
 #include "tusb.h"
@@ -126,7 +127,7 @@ void core1_entry() {
                 int frequency = find_frequency( audio_buffs[0], AUDIO_BUFFER_SIZE, ADC_SAMPLE_RATE_HZ, 100, 5000, 10);
                 int pitch = frequency_to_pitch(frequency); //actual
                 if(pitch == -1) pitch = 0;
-                else: pitch = pitch + 60; // up a few octaves...
+                else pitch = pitch + 60; // up a few octaves...
                 midi_control( pitch );
                 i = 1;
         }
@@ -135,7 +136,7 @@ void core1_entry() {
 
             midi_control( (5*i)%24 + 70 );
         }
-        tud_task();
+        // tud_task();
     }
 
 

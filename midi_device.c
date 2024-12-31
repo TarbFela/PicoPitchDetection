@@ -9,8 +9,11 @@
 #include "hardware/gpio.h"
 #include "pico/binary_info.h"
 
+/*
 #include "bsp/board.h"
 #include "tusb.h"
+
+ */
 
 //--------------------------------------------------------------------+
 // Device callbacks (set to do nothing currently)
