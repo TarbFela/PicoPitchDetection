@@ -13,6 +13,7 @@ add_executable(PitchDetection
 		midi_device.c
 		usb_descriptors.c
 		pitch_analysis.c
+		usb_debug.c
 )
 
 # stdio_usb = 1 for usb debugging, = 0 for midi functionality

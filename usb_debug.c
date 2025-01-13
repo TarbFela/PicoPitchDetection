@@ -15,11 +15,38 @@
 
 
 #include "pitch_analysis.h"
-#include "midi_device.h"
-#include "pico/binary_info.h"
 
-#include "bsp/board.h"
-#include "tusb.h"
+
+/*
+        +—————————————————————————————————+—————————————————————————————————+—————————————————————————————————+
+        +—————————————————————————————————+—————————————————————————————————+—————————————————————————————————+
+        ||
+        ||       COPY THE BASIC PITCH DETECTION FUNCTIONALITY FROM main.c
+        ||       PRINT DATA OUT TO USB STDIO
+        ||       USE JSON FORMAT ( see core1_entry() )
+        ||            NOTE: technically, a JSON file should start and end with { and },
+        ||            but since our ending is arbitrary, we'll just skip that and leave
+        ||            it to the python parser to deal with it...
+        ||
+        ||
+        ||           "sample #" : {
+        ||               "pitch_n" : pitch# ,
+        ||               "pitch" : "notename (octave#)" , // see: pitch_analysis.c, print_note()
+        ||               "sample rate" : sample_rate# ,
+        ||               "buffer size" : buffer_size# ,
+        ||               "audio buffer" : [#,#,#,#,#,#...] ,
+        ||
+        ||              } ,
+        ||
+        ||          "sample #" : ...
+        ||
+        ||
+        ||
+        +—————————————————————————————————+—————————————————————————————————+—————————————————————————————————+
+        +—————————————————————————————————+—————————————————————————————————+—————————————————————————————————+
+ */
+
+
 
 
 
@@ -107,36 +134,33 @@ void core1_entry() {
     // initialize...
     multicore_fifo_push_blocking(MULTICORE_GOOD_FLAG); // tell main that we're good
 
-    board_init();
-    tusb_init();
+    //board_init();
+    //tusb_init();
 
     int pitch = -1;
     int i = 0;
     while(1) {
 
-        if( multicore_fifo_rvalid() ) { // if main() has raised the flag (mc_fifo_push) do this.
+        if( multicore_fifo_rvalid() ) {
                 multicore_fifo_pop_blocking();
                 int frequency = find_frequency( audio_buffs[0], AUDIO_BUFFER_SIZE, ADC_SAMPLE_RATE_HZ, 100, 5000, 10);
                 int pitch = frequency_to_pitch(frequency); //actual
 
+                printf("\"sample %d\": {", i);
+                printf("\"pitch_n\": %d,\n",pitch);
+                print_note(pitch);
 
-                if(pitch == -1) pitch = 0;
-                else pitch = pitch + 60; // up a few octaves...
+                printf("\"audio buffer\": [");
+                for( int sample = 0; sample < AUDIO_BUFFER_SIZE; sample++ ) printf("%d, ",audio_buffs[0][sample]);
+                printf("],\n");
 
-                midi_control( pitch );
+                printf("},\n");
 
 
-                i = 1;
+                i += 1;
         }
 
 
-        // this part is just for testing, it provides increasing tones when the above code isn't doing anything
-        // it proves that your midi is working and that your code above is not working
-        else if( (i++) % 480001 == 0) {
-            midi_control( (5*i)%24 + 70 );
-        }
-
-        tud_task();
     }
 
 
@@ -205,7 +229,7 @@ int main() {
     uint32_t mcfifo_val = multicore_fifo_pop_blocking();
     if(mcfifo_val != MULTICORE_GOOD_FLAG) printf("Failed to initialize core 1.\n");
 
-    
+
 
 
     sleep_ms(1000);
@@ -225,7 +249,9 @@ int main() {
 
         audio_capture_no_blocking(dma_chan, audio_buffs[0], AUDIO_BUFFER_SIZE);
         dma_channel_wait_for_finish_blocking(dma_chan);
-
+        printf("AUDIO BUFFER: {");
+        for( int sample = 0; sample < AUDIO_BUFFER_SIZE; sample++ ) printf("%d, ",audio_buffs[0][sample]);
+        printf("}\n");
         multicore_fifo_push_blocking( 0 );
 
         sleep_ms(100);

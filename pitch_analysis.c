@@ -49,11 +49,11 @@ int find_frequency(uint16_t *buff, uint32_t size, uint32_t sample_rate, uint32_t
         else {
             cum_avg = (cum_avg * (tau - 1) + corrs[tau]) / tau;
             corrs[tau] = 100 * corrs[tau] / cum_avg;
-            //printf("\tf: %7.0d, ca: %10.0d, c: %7.0d\n", (int)(sample_rate/tau), cum_avg, corrs[tau]);
+            printf("\tfreq: %7.0d, cumavg: %10.0d, corr_norm: %7.0d\n", (int)(sample_rate/tau), cum_avg, corrs[tau]);
         }
     }
 
-    //printf("\n");
+
     for( tau = min_tau; tau < half_size; tau++) {
         if( corrs[tau] < correlation_threshhold) ret_val= (sample_rate/tau);
     }
@@ -110,7 +110,7 @@ const char print_note_strings[12][3] = {
      "C\0","C#\0", "D\0","D#\0", "E\0","F\0","F#\0", "G\0","G#\0", "A\0","A#\0", "B\0"
 };
 void print_note(int pitch) {
-    if(pitch < 1) printf("Bad print_note() input...");
-    else printf("%s  (%d)\n",print_note_strings[pitch%12], pitch/12);
+    if(pitch < 1) printf("\"Note\": \"Bad print_note() input...\",\n");
+    else printf("\"Note\": \"%s  (%d)\",\n",print_note_strings[pitch%12], pitch/12);
 
 }
