@@ -1,6 +1,6 @@
 #define true 1
 #define false 0
-#define USB_DEBUG_MODE true
+
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -134,8 +134,6 @@ void core1_entry() {
     // initialize...
     multicore_fifo_push_blocking(MULTICORE_GOOD_FLAG); // tell main that we're good
 
-    //board_init();
-    //tusb_init();
 
     int pitch = -1;
     int i = 0;
