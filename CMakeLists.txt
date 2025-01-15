@@ -35,18 +35,18 @@ target_link_libraries(PitchDetection PRIVATE pico_stdlib tinyusb_device tinyusb_
 	pico_bootrom
 )
 
-#add_executable(USB_Debug
-#		usb_debug.c
-#		pitch_analysis.c
-#)
-#pico_enable_stdio_usb(USB_Debug 1)
-#pico_enable_stdio_uart(USB_Debug 0)
+add_executable(USB_Debug
+		usb_debug.c
+		pitch_analysis.c
+)
+pico_enable_stdio_usb(USB_Debug 1)
+pico_enable_stdio_uart(USB_Debug 0)
 #target_include_directories(USB_Debug PRIVATE ${CMAKE_CURRENT_LIST_DIR})
-#pico_add_extra_outputs(USB_Debug)
-#target_link_libraries(USB_Debug PRIVATE pico_stdlib
-#	hardware_dma
-#	hardware_adc
-#	pico_multicore
-#	pico_bootrom
-#)
+pico_add_extra_outputs(USB_Debug)
+target_link_libraries(USB_Debug PRIVATE pico_stdlib
+	hardware_dma
+	hardware_adc
+	pico_multicore
+	pico_bootrom
+)
 

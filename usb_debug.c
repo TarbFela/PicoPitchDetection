@@ -23,22 +23,22 @@
         ||
         ||       COPY THE BASIC PITCH DETECTION FUNCTIONALITY FROM main.c
         ||       PRINT DATA OUT TO USB STDIO
-        ||       USE JSON FORMAT ( see core1_entry() )
-        ||            NOTE: technically, a JSON file should start and end with { and },
-        ||            but since our ending is arbitrary, we'll just skip that and leave
-        ||            it to the python parser to deal with it...
+        ||
+        ||       Data format:
         ||
         ||
-        ||           "sample #" : {
-        ||               "pitch_n" : pitch# ,
-        ||               "pitch" : "notename (octave#)" , // see: pitch_analysis.c, print_note()
-        ||               "sample rate" : sample_rate# ,
-        ||               "buffer size" : buffer_size# ,
-        ||               "audio buffer" : [#,#,#,#,#,#...] ,
         ||
-        ||              } ,
         ||
-        ||          "sample #" : ...
+        ||
+        ||
+        ||
+        ||
+        ||
+        ||
+        ||
+        ||
+        ||
+        ||
         ||
         ||
         ||
@@ -80,7 +80,7 @@ int reset_pin_check() {
 
 #define YIN_WINDOW_WIDTH_MS 20
 #define ADC_SAMPLE_RATE_HZ 20000
-#define ADC_INPUT_PIN 26
+#define ADC_INPUT_PIN 27
 
 
 
@@ -139,24 +139,31 @@ void core1_entry() {
     int i = 0;
     while(1) {
 
-        if( multicore_fifo_rvalid() ) {
-                multicore_fifo_pop_blocking();
-                int frequency = find_frequency( audio_buffs[0], AUDIO_BUFFER_SIZE, ADC_SAMPLE_RATE_HZ, 100, 5000, 10);
-                int pitch = frequency_to_pitch(frequency); //actual
 
-                printf("\"sample %d\": {", i);
-                printf("\"pitch_n\": %d,\n",pitch);
-                print_note(pitch);
+            multicore_fifo_pop_blocking();
 
-                printf("\"audio buffer\": [");
-                for( int sample = 0; sample < AUDIO_BUFFER_SIZE; sample++ ) printf("%d, ",audio_buffs[0][sample]);
-                printf("],\n");
+            printf("SAMPLE: %d\n",i);
 
-                printf("},\n");
+            int frequency = find_frequency( audio_buffs[0], AUDIO_BUFFER_SIZE, ADC_SAMPLE_RATE_HZ, 100, 5000, 10);
+            int pitch = frequency_to_pitch(frequency); //actual
 
 
-                i += 1;
-        }
+            printf("PITCH_N: %d\n",pitch);
+            print_note(pitch);
+
+            printf("AUDIO_BUFFER: ");
+            for( int sample = 0; sample < AUDIO_BUFFER_SIZE; sample++ ) {
+                printf("%d",audio_buffs[0][sample]);
+                if(sample + 1 < AUDIO_BUFFER_SIZE) printf(", ");
+            }
+            printf("\n");
+
+
+            multicore_fifo_push_blocking(1);
+
+
+            i += 1;
+
 
 
     }
@@ -243,16 +250,21 @@ int main() {
     //                                      MAIN LOOP
     // —————————————————————————————————————————————————————————————————————————————————————————
 
+
+    char ui_char = 0;
     while(1) {
+        for(int j = 0; j<100; j++) {
+            audio_capture_no_blocking(dma_chan, audio_buffs[0], AUDIO_BUFFER_SIZE);
+            dma_channel_wait_for_finish_blocking(dma_chan);
+            //printf("AUDIO BUFFER: {");
+            //for( int sample = 0; sample < AUDIO_BUFFER_SIZE; sample++ ) printf("%d, ",audio_buffs[0][sample]);
+            //printf("}\n");
+            multicore_fifo_push_blocking(0);
+            multicore_fifo_pop_blocking();
+        }
 
-        audio_capture_no_blocking(dma_chan, audio_buffs[0], AUDIO_BUFFER_SIZE);
-        dma_channel_wait_for_finish_blocking(dma_chan);
-        printf("AUDIO BUFFER: {");
-        for( int sample = 0; sample < AUDIO_BUFFER_SIZE; sample++ ) printf("%d, ",audio_buffs[0][sample]);
-        printf("}\n");
-        multicore_fifo_push_blocking( 0 );
-
-        sleep_ms(100);
+        scanf("%c",&ui_char);
+        if(ui_char == 'q') break;
 
     }
 
