@@ -107,7 +107,7 @@ void core1_entry() {
     while(1) {
             multicore_fifo_pop_blocking();
 
-            int frequency = find_frequency( audio_buffs[0], AUDIO_BUFFER_SIZE, ADC_SAMPLE_RATE_HZ, 100, 5000, 10, corrs_buff);
+            int frequency = find_frequency( audio_buffs[0], AUDIO_BUFFER_SIZE, ADC_SAMPLE_RATE_HZ, 100, 5000, 70, corrs_buff);
             int pitch = frequency_to_pitch(frequency); //actual
 
             //print out input buffer
@@ -118,6 +118,7 @@ void core1_entry() {
             //print out corrs buffer
             printf("\nCORRS BUFFER: ");
             for( int tau = 0; tau < (AUDIO_BUFFER_SIZE+1) * 0.5; tau++) printf("%d, ", corrs_buff[tau]);
+            printf("\nTAU VALUE: %d",frequency);
             printf(" EOT\n"); // signal end of transmission
             multicore_fifo_push_blocking(1); // tell main to continue
 

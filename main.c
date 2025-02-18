@@ -116,6 +116,7 @@ void core1_entry() {
 
         if( multicore_fifo_rvalid() ) { // if main() has raised the flag (mc_fifo_push) do this.
                 multicore_fifo_pop_blocking();
+/*
                 int frequency = find_frequency( audio_buffs[0], AUDIO_BUFFER_SIZE, ADC_SAMPLE_RATE_HZ, 100, 5000, 10);
                 int pitch = frequency_to_pitch(frequency); //actual
 
@@ -127,6 +128,7 @@ void core1_entry() {
 
 
                 i = 1;
+*/
         }
 
 

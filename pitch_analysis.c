@@ -16,7 +16,8 @@
 //    0: no frequency met the correlation threshhold. This is useful for loud indiscriminate sounds
 //    -1: bad arguments
 //    -2: malloc failed (damn you, malloc!)
-
+// TODO: make it return a frequency
+// TODO: re-organize the passed info into a typedef struct
 int find_frequency(uint16_t *buff, uint32_t size, uint32_t sample_rate, uint32_t min_freq, uint32_t max_freq, uint32_t correlation_threshhold, uint32_t *corrs_dest) {
     uint32_t half_size = size / 2;
     int ret_val = -1;
@@ -24,7 +25,7 @@ int find_frequency(uint16_t *buff, uint32_t size, uint32_t sample_rate, uint32_t
     if(min_freq < half_size / sample_rate || max_freq > sample_rate || max_freq < min_freq) return -1;
 
     uint32_t tau;
-    uint32_t min_tau = sample_rate / max_freq;
+    uint32_t min_tau = 5;//sample_rate / max_freq;
 
     // note: uint32_t goes up to 4.3 billion. The highest correlations
     // I've seen so far with buffer sizes this big are around 5 million,
@@ -47,19 +48,39 @@ int find_frequency(uint16_t *buff, uint32_t size, uint32_t sample_rate, uint32_t
         if(tau == 0) cum_avg = corrs[tau];
         else {
             cum_avg = (cum_avg * (tau - 1) + corrs[tau]) / tau;
-            corrs[tau] = 100 * corrs[tau] / cum_avg;
+            corrs[tau] = CORR_INT_SCALAR * corrs[tau] / cum_avg;
             //printf("freq: %7.0d, cumavg: %10.0d, corr_norm: %7.0d", (int)(sample_rate/tau), cum_avg, corrs[tau]);
         }
         corrs_dest[tau] = corrs[tau]; // TODO: REMOVE AFTER DEBUG, as well as argument
     }
 
-    for( tau = min_tau; tau < half_size; tau++) {
-        if( corrs[tau] < correlation_threshhold) ret_val= (sample_rate/tau);
+    // FIND THE LOWEST FREQUENCY TROUGH
+    // Considerations:
+    // (1) High Tau = Low Frequency
+    // (2) Audio with a frequency "f" will produce peaks at corrs[f], corrs[2f], corrs[3f]...
+    // (3) The actual corrs curve is **not smooth**
+    // Method: A trough is characterized by falling and then rising
+    // (1) We will start from our highest tau (lowest frequency) and increment up
+    // (2) We will keep track of the running minimum
+    // (3) If we're going down a trough, we will be very close to our most recent minimum
+    // (4) If we're going up a trough, we will be further from our minimum
+    // (5) So if our corrs[tau] is much bigger than our minimum, we'll know we reached the local minimum a little while back
+    // (6) it's also good to check that our local min was withing the correlation threshhold in the first place
+    uint32_t corrs_min = CORR_INT_SCALAR; //biggest (good) normalized corr value
+    int corrs_min_index = -1; // -1 is a "nothing found" marker
+    for( tau = half_size - 1; tau >= min_tau; tau--) { //big tau --> small tau :: low freq --> high freq
+        if(corrs[tau] > CORR_INT_SCALAR) continue; // skip bad values
+        if(corrs[tau] < corrs_min && corrs[tau] < correlation_threshhold) { //min update (only on low enough values)
+            corrs_min = corrs[tau];
+            corrs_min_index = tau;
+        } else if(corrs[tau] - TROUGH_THRESHHOLD > corrs_min) break; // if we've gone back up enough, break
     }
+    int tau_out = corrs_min_index;
+
     free(corrs); // oopsies don't want a memory leak now, do we?
 
-    if(ret_val == -1) return 0;
-    return ret_val;
+    if(tau_out == -1) return 0;
+    return tau_out;
 }
 
 
