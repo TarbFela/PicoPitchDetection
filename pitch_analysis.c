@@ -17,15 +17,13 @@
 //    -1: bad arguments
 //    -2: malloc failed (damn you, malloc!)
 
-int find_frequency(uint16_t *buff, uint32_t size, uint32_t sample_rate, uint32_t min_freq, uint32_t max_freq, uint32_t correlation_threshhold) {
+int find_frequency(uint16_t *buff, uint32_t size, uint32_t sample_rate, uint32_t min_freq, uint32_t max_freq, uint32_t correlation_threshhold, uint32_t *corrs_dest) {
     uint32_t half_size = size / 2;
     int ret_val = -1;
     // check for bad inputs
     if(min_freq < half_size / sample_rate || max_freq > sample_rate || max_freq < min_freq) return -1;
 
-
     uint32_t tau;
-
     uint32_t min_tau = sample_rate / max_freq;
 
     // note: uint32_t goes up to 4.3 billion. The highest correlations
@@ -37,22 +35,23 @@ int find_frequency(uint16_t *buff, uint32_t size, uint32_t sample_rate, uint32_t
 
     uint32_t cum_avg = 1;
 
-
     for( tau = 0; tau < half_size; tau++) {
         corrs[tau] = 0;
+        // CORRELATION CALCULATION
         for( int sample = 0; sample < half_size; sample ++) {
             int diff = (int)(buff[sample] - buff[sample+tau]);
             uint32_t diff_squared = diff*diff;
             corrs[tau] += diff_squared;
         }
+        // NORMALIZATION (averaging)
         if(tau == 0) cum_avg = corrs[tau];
         else {
             cum_avg = (cum_avg * (tau - 1) + corrs[tau]) / tau;
             corrs[tau] = 100 * corrs[tau] / cum_avg;
             //printf("freq: %7.0d, cumavg: %10.0d, corr_norm: %7.0d", (int)(sample_rate/tau), cum_avg, corrs[tau]);
         }
+        corrs_dest[tau] = corrs[tau]; // TODO: REMOVE AFTER DEBUG, as well as argument
     }
-
 
     for( tau = min_tau; tau < half_size; tau++) {
         if( corrs[tau] < correlation_threshhold) ret_val= (sample_rate/tau);
@@ -61,7 +60,6 @@ int find_frequency(uint16_t *buff, uint32_t size, uint32_t sample_rate, uint32_t
 
     if(ret_val == -1) return 0;
     return ret_val;
-
 }
 
 

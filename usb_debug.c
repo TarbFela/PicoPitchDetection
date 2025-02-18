@@ -13,42 +13,7 @@
 #include "pico/multicore.h"
 #include "pico/bootrom.h"
 
-
 #include "pitch_analysis.h"
-
-
-/*
-        +—————————————————————————————————+—————————————————————————————————+—————————————————————————————————+
-        +—————————————————————————————————+—————————————————————————————————+—————————————————————————————————+
-        ||
-        ||       COPY THE BASIC PITCH DETECTION FUNCTIONALITY FROM main.c
-        ||       PRINT DATA OUT TO USB STDIO
-        ||
-        ||       Data format:
-        ||
-        ||
-        ||
-        ||
-        ||
-        ||
-        ||
-        ||
-        ||
-        ||
-        ||
-        ||
-        ||
-        ||
-        ||
-        ||
-        ||
-        +—————————————————————————————————+—————————————————————————————————+—————————————————————————————————+
-        +—————————————————————————————————+—————————————————————————————————+—————————————————————————————————+
- */
-
-
-
-
 
 #define RESET_PIN 1
 int reset_pin_check() {
@@ -134,38 +99,30 @@ void core1_entry() {
     // initialize...
     multicore_fifo_push_blocking(MULTICORE_GOOD_FLAG); // tell main that we're good
 
+    uint32_t *corrs_buff;
+    corrs_buff = (uint32_t *) malloc( (AUDIO_BUFFER_SIZE + 1) * 0.5 * sizeof(uint32_t));
 
     int pitch = -1;
     int i = 0;
     while(1) {
-
-
             multicore_fifo_pop_blocking();
 
-            printf("SAMPLE: %d\n",i);
-
-            int frequency = find_frequency( audio_buffs[0], AUDIO_BUFFER_SIZE, ADC_SAMPLE_RATE_HZ, 100, 5000, 10);
+            int frequency = find_frequency( audio_buffs[0], AUDIO_BUFFER_SIZE, ADC_SAMPLE_RATE_HZ, 100, 5000, 10, corrs_buff);
             int pitch = frequency_to_pitch(frequency); //actual
 
-
-            printf("PITCH_N: %d\n",pitch);
-            print_note(pitch);
-
-            printf("AUDIO_BUFFER: ");
+            //print out input buffer
+            printf("\nINPUT BUFFER: ");
             for( int sample = 0; sample < AUDIO_BUFFER_SIZE; sample++ ) {
-                printf("%d",audio_buffs[0][sample]);
-                if(sample + 1 < AUDIO_BUFFER_SIZE) printf(", ");
+                printf("%d, ",audio_buffs[0][sample]);
             }
-            printf("\n");
-
-
-            multicore_fifo_push_blocking(1);
+            //print out corrs buffer
+            printf("\nCORRS BUFFER: ");
+            for( int tau = 0; tau < (AUDIO_BUFFER_SIZE+1) * 0.5; tau++) printf("%d, ", corrs_buff[tau]);
+            printf(" EOT\n"); // signal end of transmission
+            multicore_fifo_push_blocking(1); // tell main to continue
 
 
             i += 1;
-
-
-
     }
 
 
@@ -201,7 +158,7 @@ int main() {
         true,    // Enable DMA data request (DREQ)
         1,       // DREQ (and IRQ) asserted when at least 1 sample present
         false,   // We won't see the ERR bit because of 8 bit reads; disable.
-        true     // Shift each sample to 8 bits when pushing to FIFO
+        false     // Shift each sample to 8 bits when pushing to FIFO?
     );
     // Divisor of 0 -> full speed. Free-running capture with the divider is
     // equivalent to pressing the ADC_CS_START_ONCE button once per `div + 1`
@@ -234,39 +191,26 @@ int main() {
     uint32_t mcfifo_val = multicore_fifo_pop_blocking();
     if(mcfifo_val != MULTICORE_GOOD_FLAG) printf("Failed to initialize core 1.\n");
 
-
-
-
     sleep_ms(1000);
-
-
-
-    int reset_counter = 0;
-    uint32_t abrr_i = 0; // audio buffer round robin
-                        // useful for the case where we want to take in audio,
-                        // and then continue to take in audio while processing the previous batch
 
     // —————————————————————————————————————————————————————————————————————————————————————————
     //                                      MAIN LOOP
     // —————————————————————————————————————————————————————————————————————————————————————————
 
+    char ui[64];
+    for(int i = 0; i<63; i++) ui[i] = '.';
+    ui[63] = 0;
 
-    char ui_char = 0;
+
     while(1) {
-        for(int j = 0; j<100; j++) {
-            audio_capture_no_blocking(dma_chan, audio_buffs[0], AUDIO_BUFFER_SIZE);
-            dma_channel_wait_for_finish_blocking(dma_chan);
-            //printf("AUDIO BUFFER: {");
-            //for( int sample = 0; sample < AUDIO_BUFFER_SIZE; sample++ ) printf("%d, ",audio_buffs[0][sample]);
-            //printf("}\n");
-            multicore_fifo_push_blocking(0);
-            multicore_fifo_pop_blocking();
-        }
-
-        scanf("%c",&ui_char);
-        if(ui_char == 'q') break;
-
+        scanf("%s",&ui);
+        if(ui[0] == 'q') break;
+        audio_capture_no_blocking(dma_chan, audio_buffs[0], AUDIO_BUFFER_SIZE); //start capture
+        dma_channel_wait_for_finish_blocking(dma_chan); //wait for end of capture
+        multicore_fifo_push_blocking(0); //start printout
+        multicore_fifo_pop_blocking(); //wait for end of printout
     }
+
 
     reset_usb_boot(0,0);
     return 0;
