@@ -96,10 +96,17 @@ int find_frequency(uint16_t *buff, uint32_t size, uint32_t sample_rate, uint32_t
     // Use that as a dynamic correlation threshhold to differentiate harmonics from root-copies
     // Iterate downward from our max freq (min tau) until we get close to our dynamic threshhold
 
+    // State machine: Get to our trough, find a minimum within that trough
 
 
+    uint32_t loc_min = 1000; //big number
+    int latch = 0;
     for( tau = 1; tau < half_size - 1; tau++) {
-        if( corrs[tau] - abs_min_corrs < 10) break;
+        if( latch == 0 && corrs[tau] - abs_min_corrs < 10) latch = 1;
+        else if (latch) {
+            if (corrs[tau] < loc_min) loc_min = corrs[tau];
+            else break;
+        }
     }
 
 
