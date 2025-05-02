@@ -2,6 +2,19 @@
 
 ## Work in Progress
 
+### Hypothetical Approximation for True Frequency
+
+**Problem: our true frequency likely lies at a tau between our two lowest corr values**
+
+Solution: 
+1. Take three points: the **minimum** and one to either side
+2. Our "true" tau lies to one side or another of our recorded minimum
+3. Use the following equation:
+
+`x_0 ≈ x_min + tau_step * (a-b) / 2(a+b+1)`
+
+4. Use some large-ish number, tau_step, to circumvent int rounding
+
 ### Hypothesis for testing
 
 **Issue:** the pitch detection yields a low confidence, since the Yin Correlation curve is noisy. 

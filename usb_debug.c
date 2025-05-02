@@ -44,14 +44,19 @@ int reset_pin_check() {
 //    Which has a frequency of about 150Hz, so our window would drop to 13ms.
 
 #define YIN_WINDOW_WIDTH_MS 20
-#define ADC_SAMPLE_RATE_HZ 20000
-#define ADC_INPUT_PIN 27
-
+#define ADC_SAMPLE_RATE_HZ 15000
+#define ADC_INPUT_PIN 28
 
 
 #define AUDIO_BUFFER_SIZE          (YIN_WINDOW_WIDTH_MS * ADC_SAMPLE_RATE_HZ / 1000)
 #define AUDIO_BUFFER_SIZE_HALF     (AUDIO_BUFFER_SIZE/2)
 #define AUDIO_ADC_CLK_DIV          (48000000 / ADC_SAMPLE_RATE_HZ)
+
+#define N_AUDIO_SUBBUFFERS          4
+#define AUDIO_SUBBUFFER_SIZE        AUDIO_BUFFER_SIZE / N_AUDIO_SUBBUFFERS
+
+#define BOTTOM_NOTE 7U // G2
+#define NUM_NOTES 36U // G2 to F#5
 
 
 //                                +——————————————————————————+
@@ -94,36 +99,56 @@ void audio_capture_no_blocking(uint dma_chan, uint16_t *buff, size_t buff_size) 
 // —————————————————————————————————————————————————————————————————————————————————————————
 
 #define MULTICORE_GOOD_FLAG 0xBEEF
+
 void core1_entry() {
 
     // initialize...
     multicore_fifo_push_blocking(MULTICORE_GOOD_FLAG); // tell main that we're good
 
-    uint32_t *corrs_buff;
-    corrs_buff = (uint32_t *) malloc( (AUDIO_BUFFER_SIZE + 1) * 0.5 * sizeof(uint32_t));
+    FREQ_ANALYZER_T *fa_s = (FREQ_ANALYZER_T *)multicore_fifo_pop_blocking(); // get access to the freq analyzer struct
+
+    // an array of 24 pitches (G2 98Hz to F#4 370) expressed at sample-offsets in increasing order in terms of tau
+    uint32_t test_tau_array[NUM_NOTES];
+    for(uint32_t tt = NUM_NOTES + BOTTOM_NOTE - 1; tt >= BOTTOM_NOTE && tt < NUM_NOTES + BOTTOM_NOTE; tt--) {
+        uint32_t pitchfreq = PITCH_FREQS[(tt%12)]; // get Oct2 pitch
+        for(int oct = 0; oct < (tt/12); oct++) {
+            pitchfreq *= 2;
+        }
+        test_tau_array[tt-BOTTOM_NOTE] = fa_s->sample_rate / pitchfreq;
+    }
+
 
     int pitch = -1;
+    int frequency, volume = 0;
     int i = 0;
     while(1) {
-            multicore_fifo_pop_blocking();
+        multicore_fifo_pop_blocking();
 
-            int frequency = find_frequency( audio_buffs[0], AUDIO_BUFFER_SIZE, ADC_SAMPLE_RATE_HZ, 100, 5000, 70, corrs_buff);
-            int pitch = frequency_to_pitch(frequency); //actual
+        volume = get_peak_volume(fa_s);
 
-            //print out input buffer
-            printf("\nINPUT BUFFER: ");
-            for( int sample = 0; sample < AUDIO_BUFFER_SIZE; sample++ ) {
-                printf("%d, ",audio_buffs[0][sample]);
-            }
-            //print out corrs buffer
-            printf("\nCORRS BUFFER: ");
-            for( int tau = 0; tau < (AUDIO_BUFFER_SIZE+1) * 0.5; tau++) printf("%d, ", corrs_buff[tau]);
-            printf("\nTAU VALUE: %d",frequency);
-            printf(" EOT\n"); // signal end of transmission
-            multicore_fifo_push_blocking(1); // tell main to continue
+        calculate_yin(fa_s);
+        if(volume > 25) {
+            frequency = dominant_freq(fa_s);
+        }
+        else {
+            frequency = 0;
+        }
 
 
-            i += 1;
+        //print out input buffer
+        printf("\nINPUT BUFFER: ");
+        for( int sample = 0; sample < AUDIO_BUFFER_SIZE; sample++ ) {
+            printf("%d, ",fa_s->audio_buffer[sample]);
+        }
+        //print out corrs buffer
+        printf("\nCORRS BUFFER: ");
+        for( int tau = 0; tau < fa_s->corrs_arr_size; tau++) printf("%d, ", fa_s->correlations_array[tau]);
+        printf("\nTAU VALUE: %d", frequency);
+        printf(" EOT\n"); // signal end of transmission
+        multicore_fifo_push_blocking(1); // tell main to continue
+
+
+        i += 1;
     }
 
 
@@ -182,7 +207,7 @@ int main() {
     // Set up the DMA to start transferring data as soon as it appears in FIFO
     dma_chan = dma_claim_unused_channel(true);
     printf("DMA Grace Period...\n");
-    sleep_ms(7000);
+    sleep_ms(3000);
 
 //                                +——————————————————————————+
 //                                ||     MULTICORE INIT     ||
@@ -191,6 +216,13 @@ int main() {
     multicore_launch_core1(core1_entry);
     uint32_t mcfifo_val = multicore_fifo_pop_blocking();
     if(mcfifo_val != MULTICORE_GOOD_FLAG) printf("Failed to initialize core 1.\n");
+
+//                                +——————————————————————————+
+//                                ||   FREQ ANALYZER INIT   ||
+//                                +——————————————————————————+
+    FREQ_ANALYZER_T *fa_s;
+    fa_s = init_freq_analyzer(AUDIO_BUFFER_SIZE, ADC_SAMPLE_RATE_HZ, 50);
+    multicore_fifo_push_blocking((uint32_t)fa_s);
 
     sleep_ms(1000);
 
@@ -206,7 +238,7 @@ int main() {
     while(1) {
         scanf("%s",&ui);
         if(ui[0] == 'q') break;
-        audio_capture_no_blocking(dma_chan, audio_buffs[0], AUDIO_BUFFER_SIZE); //start capture
+        audio_capture_no_blocking(dma_chan, fa_s->audio_buffer, AUDIO_BUFFER_SIZE); //start capture
         dma_channel_wait_for_finish_blocking(dma_chan); //wait for end of capture
         multicore_fifo_push_blocking(0); //start printout
         multicore_fifo_pop_blocking(); //wait for end of printout
