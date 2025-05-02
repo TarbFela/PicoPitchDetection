@@ -38,6 +38,7 @@ target_link_libraries(PitchDetection PRIVATE pico_stdlib tinyusb_device tinyusb_
 add_executable(USB_Debug
 		usb_debug.c
 		pitch_analysis.c
+		adc_stream.c
 )
 pico_enable_stdio_usb(USB_Debug 1)
 pico_enable_stdio_uart(USB_Debug 0)

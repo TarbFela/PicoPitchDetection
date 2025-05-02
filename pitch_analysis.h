@@ -20,7 +20,7 @@ typedef struct frequency_analysis {
 
 
 
-FREQ_ANALYZER_T *init_freq_analyzer(uint32_t buff_size, uint32_t sample_rate, uint32_t correlation_threshhold);
+FREQ_ANALYZER_T *init_freq_analyzer(uint16_t *audio_buff, uint32_t buff_size, uint32_t sample_rate, uint32_t correlation_threshhold);
 
 #define CORR_INT_SCALAR 100 // since normalized correlation is between 0 and 1, we adjust so it's between 0 and 100 (or some other scalar)
 #define TROUGH_THRESHHOLD 40 // arbitrary. Should do the trick!

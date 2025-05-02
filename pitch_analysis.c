@@ -14,11 +14,11 @@ const int PITCH_FREQS[12] = {  65, 69, 73, 78,
                                82, 87, 93, 98,
                                104, 110, 117, 123 };
 
-FREQ_ANALYZER_T *init_freq_analyzer(uint32_t buff_size, uint32_t sample_rate, uint32_t correlation_threshhold) {
+FREQ_ANALYZER_T *init_freq_analyzer(uint16_t *audio_buff, uint32_t buff_size, uint32_t sample_rate, uint32_t correlation_threshhold) {
     FREQ_ANALYZER_T *s;
     s = (FREQ_ANALYZER_T *)malloc(sizeof(FREQ_ANALYZER_T));
     s->buff_size = buff_size;
-    s->audio_buffer = (uint16_t *)malloc(buff_size * sizeof(uint16_t));
+    s->audio_buffer = audio_buff;
     // number of correlations is (half_size + 1)
     s->corrs_arr_size = buff_size / 2 + 1;
     s->correlations_array = (uint32_t *)malloc( s->corrs_arr_size * sizeof(uint32_t));
@@ -178,9 +178,10 @@ int dominant_freq_interpolating(FREQ_ANALYZER_T *s) {
 
     // find the minimum
     loc_min_state_t state = START;
-    uint32_t loc_min_val = corrs[0];
+    uint32_t loc_min_val = CORR_INT_SCALAR;
     uint32_t loc_min_tau = 0;
-    for(int tau = 0; tau < s->corrs_arr_size; tau++) {
+    int tau;
+    for(tau = 20; tau < s->corrs_arr_size; tau++) {
         if (corrs[tau] < loc_min_val) {
             loc_min_val = corrs[tau];
             loc_min_tau = tau;
@@ -192,11 +193,10 @@ int dominant_freq_interpolating(FREQ_ANALYZER_T *s) {
             case TROUGH:
                 if (corrs[tau] > loc_min_val + LOC_MIN_UP_THRESH) {state = DONE;}
                 break;
-            default:
-                break;
         }
         if (state == DONE) break;
     }
+    if (state != DONE) return -1; // no freq found. Sad.
 
     // x2 is our observed min, x1 and x3 lie to either side. We are biasing to the center and scaling our tau so we can operate without floats
     int x1,x2,x3,y1,y2,y3;
